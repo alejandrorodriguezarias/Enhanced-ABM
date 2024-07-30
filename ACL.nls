@@ -1,0 +1,76 @@
+
+to-report create-message [performative]
+  let msg table:make
+  table:put msg "performative" performative
+  report msg 
+end
+
+to set-sender [msg new-sender]
+  table:put msg "sender" new-sender
+end
+
+to set-receiver [msg new-receiver]
+  table:put msg "receiver" new-receiver
+end
+
+to set-reply-to [msg new-reply-to]
+  table:put msg "reply-to" new-reply-to
+end
+
+to set-content [msg new-content]
+  table:put msg "content" new-content
+end
+
+to set-language [msg new-language]
+  table:put msg "language" new-language
+end
+
+to set-ontology [msg new-ontology]
+  table:put msg "ontology" new-ontology
+end
+
+to set-protocol [msg new-protocol]
+  table:put msg "protocol" new-protocol
+end
+
+to set-conversation-id [msg new-conversation-id]
+  table:put msg "conversation-id" new-conversation-id
+end
+
+to set-reply-with [msg new-reply-with]
+  table:put msg "reply-with" new-reply-with
+end
+
+to set-in-reply-to [msg new-in-reply-to]
+  table:put msg "in-reply-to " new-in-reply-to
+end
+
+to set-reply-by  [msg new-reply-by ]
+  table:put msg "reply-by" new-reply-by
+end
+
+to send-message[msg]
+  ask table:get msg "receiver" [
+    set comm-list lput msg comm-list 
+    save-message msg
+  ]
+end
+
+
+;<summary>
+;Store a new message in the conversations structure
+;</summary>
+to save-message[msg]
+  carefully [
+    ;message from an existing conversation
+    let conversation table:get conversations table:get msg "conversation-id"
+    table:put conversation table:length conversation + 1 msg
+
+  ][
+    ;message that starts a new conversation
+    let conversation table:make
+    table:put conversation table:length conversation + 1 msg
+    table:put conversations table:get msg "conversation-id" conversation
+  ]
+  
+end

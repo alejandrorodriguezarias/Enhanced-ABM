@@ -1,0 +1,316 @@
+extensions [table]
+globals[cfp propose accept-proposal reject-proposal protocol-contract-net inform]
+
+to set-up-acl
+  set cfp "cfp"
+  set propose "propose"
+  set accept-proposal "accept-proposal"
+  set reject-proposal "reject-proposal"
+  set protocol-contract-net "p-cn"
+  set inform "inform"
+end
+
+
+;basic city council behaviour. observe the environment and launch communications
+to city-council-behave
+  if citizen-opposition-trigger [
+      if count humats with [behavior = "B"] / count humats > citizen-opposition and table:get beliefs "cfp" = false[
+    start-cfp
+  ]
+  ;TODO debería comprobar si ya le llegaron todos los mensajes
+  ]
+
+end
+
+
+;mas behaviour of critical nodes
+to communicate
+  ;process-messages
+  ifelse node-type = "City Council" [
+    process-messages-city-council
+    city-council-behave
+  ][
+    ifelse node-type = "IA Local Media" [
+      process-messages-local-media
+      ;local-media-behave
+    ][]
+  ] 
+end
+
+to-report create-accept-proposal-message
+  let msg create-message accept-proposal
+  set-sender msg self
+  set-receiver msg table:get choosed-proposal "sender"
+  set-content msg ""
+  set-conversation-id msg table:get choosed-proposal "conversation-id"
+  set-protocol msg protocol-contract-net
+  report msg
+end
+
+to-report create-reject-proposal-message[content]
+  let msg create-message reject-proposal
+  set-sender msg self
+  set-receiver msg table:get content "sender"
+  set-content msg ""
+  set-conversation-id msg table:get content "conversation-id"
+  set-protocol msg protocol-contract-net
+  report msg
+end
+
+to-report evaluate-proposals
+  let best-proposal first table:values param-list
+  foreach table:keys param-list [
+    key -> 
+    set best-proposal evaluate-proposal best-proposal table:get param-list key
+  ]
+  report best-proposal
+end
+
+to-report evaluate-proposal [bestproposal newproposal]
+  let counter-p1 0
+  let counter-p2 0
+  
+  ;cuando ambos valores son igual deberían o no puntuar a nadie o a los 2, ahora mismo puntuan un poco random
+  ifelse (table:get bestproposal "param1" < table:get newproposal "param1") [
+    set counter-p1 counter-p1 + 1 
+  ][
+    set counter-p2 counter-p2 + 1 
+  ]
+  
+  ifelse (table:get bestproposal "param2" < table:get newproposal "param2") [
+    set counter-p1 counter-p1 + 1 
+  ][
+    set counter-p2 counter-p2 + 1 
+  ]
+  
+  ifelse (table:get bestproposal "param3" > table:get newproposal "param3") [
+    set counter-p1 counter-p1 + 1 
+  ][
+    set counter-p2 counter-p2 + 1 
+  ]
+  
+  ifelse counter-p1 >= counter-p2 [
+    report bestproposal
+  ][
+    report newproposal
+  ]
+end
+
+  
+to process-accept-proposal-local-media[msg]
+  let conversation table:get conversations table:get msg "conversation-id"
+  show("-------------------")
+    let data table:get conversation 1
+  show table:get conversation 1
+  show table:get table:get data "content" "campaing"
+  show("-------------------")
+  ;cola de ejecución en base al plan
+  ;TODO añadir a las intenciones
+  let pause 15 - remainder ticks 15
+  repeat pause [
+    insert-intention "do-nothing" true
+  ]
+  insert-intention  "Run-Strategy-LocalMedia \"supporter\" 1 (list \"all\")" true
+  repeat table:get table:get data "content" "campaing" - 1[
+    repeat 14 [
+      insert-intention "do-nothing" true
+    ]
+    ;insert-intention  "Run-Strategy \"Local Media\" \"supporter\" 1 \"Local Media\" (list \"all\")" true
+    insert-intention  "Run-Strategy-LocalMedia \"supporter\" 1 (list \"all\")" true
+  ]
+  insert-intention (word "proposal-done " table:get data "sender" " " "\""table:get data "conversation-id""\"") true
+  
+  ;Run-Strategy "Local Media" "supporter" 1 "Local Media" (list "all")
+end
+
+;to process cfp, local media create a proposal by just sending all their parameters.
+to process-cfp-local-media [msg]
+  
+  if not table:get beliefs "cfp" [
+    if table:get msg "protocol" = protocol-contract-net [
+      let content table:make 
+      table:put content "param1" table:get param-list "param1"
+      table:put content "param2" table:get param-list "param2"
+      table:put content "param3" table:get param-list "param3"
+      let new-msg create-message propose 
+      set-receiver new-msg table:get msg "sender"
+      set-sender new-msg self
+      set-content new-msg content
+      set-reply-by new-msg -1
+      set-protocol new-msg protocol-contract-net
+      set-conversation-id new-msg table:get msg "conversation-id"
+      send-message new-msg
+      save-message msg
+      table:put beliefs "cfp" true
+    ]
+    ;TODO else
+  ]
+
+
+end
+
+;city council behaviour depending of the message's performative
+to process-message-city-council[msg]
+  print("info-mensaje")
+  print(table:get msg "sender")
+  print(table:get msg "receiver")
+  print(table:get msg "performative")
+  print(table:get msg "content")
+  print("fin-info-mensaje")
+  save-message msg
+  ifelse table:get msg "performative" = propose [
+    process-propose-city-council msg
+  ][ 
+    ifelse table:get msg "performative" = inform [
+      process-inform-city-council msg
+    ]
+    [
+      print("ERROR: performative not valid") ;mejorable
+    ]
+  ]
+   set comm-list remove-item 0 comm-list  ;mejorable con mucho
+  
+end
+
+to process-messages-city-council
+  foreach comm-list[
+      msg -> process-message-city-council msg
+  ]
+end
+
+to process-messages-local-media
+  foreach comm-list[
+      msg -> process-message-local-media msg
+  ]
+end
+to process-message-local-media[msg]
+  print("info-mensaje")
+  print(table:get msg "sender")
+  print(table:get msg "receiver")
+  print(table:get msg "performative")
+  print(table:get msg "content")
+  print("fin-info-mensaje")
+  save-message msg
+  ifelse table:get msg "performative" = cfp [
+    process-cfp-local-media msg
+  ] 
+  [
+    ifelse table:get msg "performative" = accept-proposal [
+        process-accept-proposal-local-media msg
+      
+    ][
+      ifelse table:get msg "performative" = reject-proposal [
+      ][
+             print("ERROR: performative not valid") ;mejorable
+      ]
+    ]
+  ] 
+  set comm-list remove-item 0 comm-list  ;mejorable con mucho
+  
+end
+
+;add the proposal to the list
+to process-propose-city-council[msg]
+  let content  table:get msg "content"
+  table:put content "sender" table:get msg "sender"
+  table:put param-list (word "proposal" (table:length param-list + 1)) table:get msg "content"
+  table:put content "conversation-id"  table:get msg "conversation-id"
+end
+
+
+to refuse-other-proposals [best-proposal]
+  foreach table:keys param-list [
+    key -> let proposal  table:get param-list key 
+    if table:get proposal "sender" != table:get best-proposal "sender"[
+      let msg create-reject-proposal-message proposal
+      send-message msg 
+      save-message msg
+    ]
+  ]
+end
+
+;start the contract net protocol
+to start-cfp 
+  insert-intention "launch-cfp" true
+end
+
+to launch-cfp
+  let limit-to-reply 1
+  foreach sort critical-nodes with [node-type = "IA Local Media"][
+    x -> let msg create-message cfp 
+    set-receiver msg x
+    set-sender msg self
+    let content table:make
+    table:put content "campaing" number-coms-cc
+    set-content msg content
+    set-reply-by msg limit-to-reply
+    set-protocol msg protocol-contract-net
+    set-conversation-id msg word date-and-time x
+    send-message msg
+    save-message msg
+    table:put beliefs "cfp" true
+  ]
+  repeat limit-to-reply [
+      insert-intention "do-nothing" true
+  ]
+  insert-intention "choose-better-proposal" true
+  set cfp-limit ticks + limit-to-reply
+end
+
+
+
+
+to choose-better-proposal
+  if (table:length param-list > 0)[
+    set choosed-proposal evaluate-proposals
+    let msg create-accept-proposal-message
+    send-message msg
+    refuse-other-proposals choosed-proposal
+    save-message msg
+    set cfp-limit -1
+    set num-comm num-comm + 2
+  ]    
+end
+
+to proposal-done[receiver id]
+  let msg create-message inform
+  set-sender msg self
+  set-receiver msg receiver
+  set-conversation-id msg id
+  set-protocol msg protocol-contract-net
+  set-content msg "done"
+  send-message msg
+  table:put beliefs "cfp" false
+end
+
+to process-inform-city-council[msg]
+  let tmp table:get conversations table:get msg "conversation-id" 
+  table:remove conversations table:get msg "conversation-id"
+  table:put beliefs "cfp" false
+  
+end
+
+
+
+
+
+
+
+;local media
+
+
+
+;to-report create-message [performative receiver content reply-by]
+  ;let msg table:make
+  ;table:put msg "performative" performative
+  ;table:put msg "sender" self
+  ;table:put msg "receiver" receiver
+  ;table:put msg "content" content
+  ;table:put msg "reply-by" reply-by
+  ;report msg 
+;end
+
+
+
+
+

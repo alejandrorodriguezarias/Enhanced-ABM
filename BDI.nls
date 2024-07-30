@@ -1,0 +1,23 @@
+
+to insert-intention [intention condition]
+  set intentions insert-item (length intentions) intentions list intention condition
+end
+
+to remove-intention
+  set intentions remove-item 0 intentions
+end
+
+to-report get-intention
+  report item 0 intentions
+end
+
+to process-intention
+  if length intentions != 0 [
+    let intention get-intention
+    show item 0 intention
+    run item 0 intention
+    if item 1 intention [
+      remove-intention
+    ]
+  ]
+end
